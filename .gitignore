@@ -1,0 +1,15 @@
+# Виртуальное окружение
+.venv/
+venv/
+ENV/
+
+# Кэш Python (байткод)
+__pycache__/
+*.py[cod]
+
+# Локальная база данных SQLite
+*.db
+*.sqlite3
+
+# Настройки VS Code
+.vscode/
