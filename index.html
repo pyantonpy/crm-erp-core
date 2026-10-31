@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini CRM & ERP</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 20px; background: #f0f2f5; }
+    h1, h2 { margin-top: 0; }
+    .analytics-bar { display: flex; gap: 16px; margin-bottom: 20px; }
+    .stat-card { background: #fff; padding: 14px 20px; border-radius: 8px; flex: 1; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-card .val { font-size: 24px; font-weight: bold; color: #1a73e8; margin-top: 4px; }
+    .container { display: flex; gap: 20px; }
+    .board { display: flex; gap: 16px; flex: 3; }
+    .column { background: #ebecf0; border-radius: 8px; flex: 1; padding: 12px; min-height: 500px; display: flex; flex-direction: column; gap: 10px; }
+    .column-title { font-weight: bold; font-size: 14px; text-transform: uppercase; color: #5e6c84; }
+    .card { background: #fff; border-radius: 6px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.15); font-size: 14px; }
+    .card-title { font-weight: bold; margin-bottom: 6px; }
+    .card-meta { color: #666; font-size: 12px; margin-bottom: 8px; }
+    .card-price { font-weight: bold; color: #2e7d32; }
+    .card-actions { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .card-actions button { font-size: 11px; padding: 4px 6px; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; }
+    .sidebar { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+    .panel { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 8px; margin-top: 6px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 4px; }
+    button.primary { background: #1a73e8; color: #fff; border: none; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h1>Система управления: Mini CRM & ERP</h1>
+
+  <!-- Аналитическая панель CRM -->
+  <div class="analytics-bar">
+    <div class="stat-card">Сделок всего<div class="val" id="st-total">0</div></div>
+    <div class="stat-card">Факт выручки (WON)<div class="val" id="st-fact">0 ₽</div></div>
+    <div class="stat-card">Прогноз воронки<div class="val" id="st-forecast">0 ₽</div></div>
+    <div class="stat-card">Конверсия (Win Rate)<div class="val" id="st-conv">0%</div></div>
+  </div>
+
+  <div class="container">
+    <!-- Канбан-доска CRM -->
+    <div class="board">
+      <div class="column" id="col-NEW"><div class="column-title">1. Новые (10%)</div></div>
+      <div class="column" id="col-IN_PROGRESS"><div class="column-title">2. Переговоры (50%)</div></div>
+      <div class="column" id="col-WON"><div class="column-title">3. Успешно (100%)</div></div>
+      <div class="column" id="col-LOST"><div class="column-title">4. Отказ (0%)</div></div>
+    </div>
+
+    <!-- Боковая панель: Форма создания и остатки ERP -->
+    <div class="sidebar">
+      <div class="panel">
+        <h2>+ Новая сделка</h2>
+        <label>Имя клиента</label>
+        <input id="in-name" placeholder="ООО Вектор">
+        <label>Телефон</label>
+        <input id="in-phone" placeholder="+7 999 000-00-00">
+        <label>Товар (из ERP)</label>
+        <select id="in-prod"></select>
+        <label>Количество</label>
+        <input id="in-qty" type="number" value="1" min="1">
+        <button class="primary" onclick="createDeal()">Создать заявку</button>
+      </div>
+
+      <div class="panel">
+        <h2>Склад (ERP)</h2>
+        <div id="erp-stock" style="font-size: 13px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadData() {
+      // 1. Склад ERP
+      const prods = await fetch('/api/products').then(r => r.json());
+      const select = document.getElementById('in-prod');
+      const stockDiv = document.getElementById('erp-stock');
+      select.innerHTML = '';
+      stockDiv.innerHTML = '';
+      prods.forEach(p => {
+        select.innerHTML += `<option value="${p.id}">${p.name} (${p.price} ₽)</option>`;
+        stockDiv.innerHTML += `<div><b>${p.name}</b>: ${p.stock} шт. на складе</div>`;
+      });
+
+      // 2. Статистика
+      const stat = await fetch('/api/analytics').then(r => r.json());
+      document.getElementById('st-total').innerText = stat.total_deals;
+      document.getElementById('st-fact').innerText = stat.actual_revenue.toLocaleString() + ' ₽';
+      document.getElementById('st-forecast').innerText = stat.forecast_revenue.toLocaleString() + ' ₽';
+      document.getElementById('st-conv').innerText = stat.conversion_rate + '%';
+
+      // 3. Сделки по колонкам
+      const deals = await fetch('/api/deals').then(r => r.json());
+      ['NEW', 'IN_PROGRESS', 'WON', 'LOST'].forEach(st => {
+        document.getElementById(`col-${st}`).innerHTML = `<div class="column-title">${st}</div>`;
+      });
+
+      deals.forEach(d => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="card-title">${d.client_name}</div>
+          <div class="card-meta">📞 ${d.client_phone}<br>📦 ${d.product_name} (${d.quantity} шт.)</div>
+          <div class="card-price">${d.total_amount.toLocaleString()} ₽</div>
+          ${d.loss_reason ? `<div style="color:red; font-size:11px;">Причина: ${d.loss_reason}</div>` : ''}
+          <div class="card-actions">
+            ${d.stage !== 'IN_PROGRESS' && d.stage !== 'WON' && d.stage !== 'LOST' ? `<button onclick="moveStage(${d.id}, 'IN_PROGRESS')">В работу</button>` : ''}
+            ${d.stage !== 'WON' && d.stage !== 'LOST' ? `<button onclick="moveStage(${d.id}, 'WON')" style="color:green;">Выиграна</button>` : ''}
+            ${d.stage !== 'LOST' && d.stage !== 'WON' ? `<button onclick="moveStage(${d.id}, 'LOST')" style="color:red;">Отказ</button>` : ''}
+          </div>
+        `;
+        document.getElementById(`col-${d.stage}`).appendChild(card);
+      });
+    }
+
+    async function createDeal() {
+      const payload = {
+        client_name: document.getElementById('in-name').value,
+        client_phone: document.getElementById('in-phone').value,
+        product_id: parseInt(document.getElementById('in-prod').value),
+        quantity: parseInt(document.getElementById('in-qty').value)
+      };
+      const res = await fetch('/api/deals', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) alert((await res.json()).detail);
+      loadData();
+    }
+
+    async function moveStage(dealId, newStage) {
+      let reason = null;
+      if (newStage === 'LOST') {
+        reason = prompt("Укажите причину проигрыша (обязательно):");
+        if (!reason) return;
+      }
+      const res = await fetch(`/api/deals/${dealId}/stage`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ stage: newStage, loss_reason: reason })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail); // Выведет ERP ошибку, если не хватает товара
+      }
+      loadData();
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
